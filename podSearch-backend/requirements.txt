@@ -7,3 +7,4 @@ python-multipart==0.0.6
 requests==2.32.3
 defusedxml==0.7.1
 supadata==1.2.1
+python-dotenv==1.0.0

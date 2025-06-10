@@ -1,7 +1,11 @@
 from typing import Optional, List
 import os
 from datetime import datetime
+from dotenv import load_dotenv
 from ..models.youtube import TranscriptSegment
+
+
+load_dotenv()
 
 try:
     from supadata import Supadata, SupadataError
@@ -14,7 +18,10 @@ class TranscriptService:
     
     def __init__(self):
         if SUPADATA_AVAILABLE:
-            self.client = Supadata(api_key="sd_83b3af6342ea05dbca4b5baaa821efa7")
+            api_key = os.getenv("SUPADATA_API_KEY")
+            if not api_key:
+                raise ValueError("SUPADATA_API_KEY environment variable is required")
+            self.client = Supadata(api_key=api_key)
         else:
             self.client = None
     
@@ -213,12 +220,12 @@ class TranscriptService:
         result = self._process_transcript_content_with_timestamps(content)
         return result["text"]
     
-    def save_transcript_to_file(self, transcript_text: str, video_id: str, directory: str = "transcripts") -> Optional[str]:
+    def save_transcript_to_file(self, transcript_data, video_id: str, directory: str = "transcripts") -> Optional[str]:
         """
-        Save transcript to a file
+        Save transcript with timestamps to a file
         
         Args:
-            transcript_text: The transcript content
+            transcript_data: Either a TranscriptWithTimestampsResponse object or plain text string
             video_id: YouTube video ID
             directory: Directory to save the file
             
@@ -228,10 +235,29 @@ class TranscriptService:
         try:
             os.makedirs(directory, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{directory}/{video_id}_transcript_{timestamp}.txt"
+            filename = f"{directory}/{video_id}_transcript_with_timestamps_{timestamp}.txt"
             
             with open(filename, 'w', encoding='utf-8') as f:
-                f.write(transcript_text)
+                if hasattr(transcript_data, 'segments') and hasattr(transcript_data, 'video_id'):
+                    f.write(f"Transcript for Video ID: {transcript_data.video_id}\n")
+                    f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("=" * 50 + "\n\n")
+                    
+                    for segment in transcript_data.segments:
+                        if segment.timestamp is not None:
+                            minutes = int(segment.timestamp // 60)
+                            seconds = int(segment.timestamp % 60)
+                            if minutes >= 60:
+                                hours = minutes // 60
+                                minutes = minutes % 60
+                                timestamp_str = f"[{hours:02d}:{minutes:02d}:{seconds:02d}]"
+                            else:
+                                timestamp_str = f"[{minutes:02d}:{seconds:02d}]"
+                            f.write(f"{timestamp_str} {segment.text}\n")
+                        else:
+                            f.write(f"[--:--] {segment.text}\n")
+                else:
+                    f.write(str(transcript_data))
             
             return filename
         except Exception as e:
