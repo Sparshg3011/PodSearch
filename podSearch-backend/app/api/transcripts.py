@@ -35,10 +35,8 @@ async def get_transcript_supadata(
                 response_data.metadata["file_saved"] = False
                 response_data.metadata["file_error"] = "Failed to save file"
         
-        # Save to database with timestamps if requested
         if save_to_db and result["segments"]:
             try:
-                # Save video ID and transcript segments to database
                 db_result = await transcript_service.save_transcript_to_db(
                     video_id=video_id,
                     segments=result["segments"]
