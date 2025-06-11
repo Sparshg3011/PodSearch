@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 from ..models.youtube import TranscriptSegment
+from ..models.transcript_db import TranscriptSegmentDB
 
 
 load_dotenv()
@@ -262,4 +263,106 @@ class TranscriptService:
             return filename
         except Exception as e:
             print(f"Failed to save transcript: {e}")
-            return None 
+            return None
+    
+    async def save_transcript_to_db(self, video_id: str, segments: List[TranscriptSegment]) -> dict:
+        """
+        Save video ID and transcript segments to MongoDB
+        
+        Args:
+            video_id: YouTube video ID
+            segments: List of transcript segments with timestamps
+            
+        Returns:
+            Dictionary with save results
+        """
+        try:
+            await TranscriptSegmentDB.find(
+                TranscriptSegmentDB.video_id == video_id
+            ).delete()
+            
+            segment_docs = []
+            for i, segment in enumerate(segments):
+                segment_doc = TranscriptSegmentDB(
+                    video_id=video_id,
+                    sequence=i,
+                    text=segment.text,
+                    timestamp=segment.timestamp
+                )
+                segment_docs.append(segment_doc)
+            
+            if segment_docs:
+                await TranscriptSegmentDB.insert_many(segment_docs)
+            
+            return {
+                "success": True,
+                "video_id": video_id,
+                "segments_saved": len(segment_docs)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to save transcript to database: {str(e)}"
+            }
+    
+    async def get_transcript_from_db(self, video_id: str) -> Optional[List[dict]]:
+        """
+        Get transcript segments from MongoDB by video ID
+        
+        Args:
+            video_id: YouTube video ID
+            
+        Returns:
+            List of transcript segments or None
+        """
+        try:
+            segments = await TranscriptSegmentDB.find(
+                TranscriptSegmentDB.video_id == video_id
+            ).sort(TranscriptSegmentDB.sequence).to_list()
+            
+            if not segments:
+                return None
+            
+            return [
+                {
+                    "sequence": segment.sequence,
+                    "text": segment.text,
+                    "timestamp": segment.timestamp,
+                    "created_at": segment.created_at
+                }
+                for segment in segments
+            ]
+            
+        except Exception as e:
+            return None
+    
+    # async def search_transcripts_in_db(self, query: str, limit: int = 10) -> List[dict]:
+    #     """
+    #     Search transcript segments by text content
+        
+    #     Args:
+    #         query: Search query
+    #         limit: Maximum results to return
+            
+    #     Returns:
+    #         List of matching transcript segments
+    #     """
+    #     try:
+    #         segments = await TranscriptSegmentDB.find({
+    #             "text": {"$regex": query, "$options": "i"}
+    #         }).limit(limit).to_list()
+            
+    #         return [
+    #             {
+    #                 "video_id": segment.video_id,
+    #                 "sequence": segment.sequence,
+    #                 "text": segment.text,
+    #                 "timestamp": segment.timestamp,
+    #                 "created_at": segment.created_at
+    #             }
+    #             for segment in segments
+    #         ]
+            
+    #     except Exception as e:
+    #         return [] 
