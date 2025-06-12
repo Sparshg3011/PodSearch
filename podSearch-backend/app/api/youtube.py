@@ -12,7 +12,7 @@ async def search_youtube(
     max_results: int = Query(5, ge=1, le=20)
 ):
     try:
-        search_query = f"{q} podcast"
+        search_query = f"{q} podcast" 
         videos = YouTubeService.search_videos(search_query, max_results)
         return YouTubeSearchResponse(results=videos, query=search_query)
     except Exception as e:
