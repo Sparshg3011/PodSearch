@@ -8,12 +8,13 @@ transcript_service = TranscriptService()
 
 @router.get("/search", response_model=YouTubeSearchResponse)
 async def search_youtube(
-    q: str = Query(...),
+    q: str = Query(..., description="Search query"),
     max_results: int = Query(5, ge=1, le=20)
 ):
     try:
-        videos = YouTubeService.search_videos(q, max_results)
-        return YouTubeSearchResponse(results=videos, query=q)
+        search_query = f"{q} podcast"
+        videos = YouTubeService.search_videos(search_query, max_results)
+        return YouTubeSearchResponse(results=videos, query=search_query)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
