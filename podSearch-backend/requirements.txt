@@ -13,3 +13,17 @@ python-dotenv==1.0.0
 pymongo==4.6.1
 motor==3.3.2
 beanie==1.24.0
+
+# RAG Pipeline dependencies
+openai>=1.12.0
+sentence-transformers>=2.2.2
+chromadb>=0.4.22
+langchain>=0.1.6
+langchain-openai>=0.0.5
+numpy>=1.24.3
+scikit-learn>=1.3.2
+
+# Additional dependencies for ChromaDB compatibility
+tenacity>=8.2.0
+httpx>=0.24.0
+aiofiles>=23.0.0

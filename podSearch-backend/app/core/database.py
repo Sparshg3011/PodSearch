@@ -1,22 +1,22 @@
-from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from typing import Optional
+from typing import Optional, Any
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Database:
-    client: Optional[AsyncIOMotorClient] = None
+    client: Optional[Any] = None
     database = None
 
 database = Database()
 
 async def connect_to_mongo():
     """Create database connection"""
-    mongodb_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    mongodb_url = os.getenv("MONGODB_URL")
     database_name = os.getenv("DATABASE_NAME", "podsearch")
     
+    from motor.motor_asyncio import AsyncIOMotorClient
     database.client = AsyncIOMotorClient(mongodb_url)
     database.database = database.client[database_name]
     
