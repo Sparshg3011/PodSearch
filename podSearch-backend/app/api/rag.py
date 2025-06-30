@@ -17,23 +17,36 @@ transcript_service = TranscriptService()
 async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest = None):
     """Process a video's transcript data for RAG functionality"""
     try:
-        # Get transcript data from database
+        # Try to get transcript data from database first
         segments = await transcript_service.get_transcript_from_db(video_id)
         
+        # If not in database, fetch from YouTube directly
         if not segments:
-            raise HTTPException(status_code=404, detail="Transcript not found in database")
-        
-        # Convert segments to the format expected by RAG service
-        formatted_segments = []
-        for segment in segments:
-            formatted_segments.append({
-                "text": segment.get("text", ""),
-                "timestamp": segment.get("timestamp", 0)
-            })
+            print(f"Transcript not found in database for {video_id}, fetching directly...")
+            transcript_result = transcript_service.extract_transcript(video_id)
+            
+            if not transcript_result["success"]:
+                raise HTTPException(status_code=404, detail=f"Could not fetch transcript: {transcript_result['error']}")
+            
+            # Convert TranscriptSegment objects to dict format
+            formatted_segments = []
+            for segment in transcript_result["segments"]:
+                formatted_segments.append({
+                    "text": segment.text,
+                    "timestamp": segment.timestamp
+                })
+        else:
+            # Convert database segments to the format expected by RAG service
+            formatted_segments = []
+            for segment in segments:
+                formatted_segments.append({
+                    "text": segment.get("text", ""),
+                    "timestamp": segment.get("timestamp", 0)
+                })
         
         # Check if collection already exists and handle overwrite
-        existing_videos = rag_service.list_video_collections()
-        if video_id in existing_videos:
+        existing_collections = rag_service.list_video_collections()
+        if video_id in [c['name'] for c in existing_collections]:
             if request and not request.overwrite:
                 return RAGProcessResponse(
                     success=False,
@@ -71,8 +84,8 @@ async def search_transcript(video_id: str, request: RAGSearchRequest):
     """Search for relevant segments in a video's transcript"""
     try:
         # Check if video has been processed
-        existing_videos = rag_service.list_video_collections()
-        if video_id not in existing_videos:
+        existing_collections = rag_service.list_video_collections()
+        if video_id not in [c['name'] for c in existing_collections]:
             raise HTTPException(
                 status_code=404, 
                 detail=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
@@ -115,8 +128,8 @@ async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
     """Generate an AI response based on transcript content"""
     try:
         # Check if video has been processed
-        existing_videos = rag_service.list_video_collections()
-        if video_id not in existing_videos:
+        existing_collections = rag_service.list_video_collections()
+        if video_id not in [c['name'] for c in existing_collections]:
             raise HTTPException(
                 status_code=404,
                 detail=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
@@ -161,10 +174,10 @@ async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
 async def list_processed_videos():
     """List all videos that have been processed for RAG"""
     try:
-        video_ids = rag_service.list_video_collections()
+        collections = rag_service.list_video_collections()
         return RAGListResponse(
-            video_ids=video_ids,
-            count=len(video_ids)
+            collections=collections,
+            count=len(collections)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

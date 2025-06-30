@@ -1,9 +1,10 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 class RAGSearchRequest(BaseModel):
     query: str = Field(..., description="Search query for transcript content")
-    top_k: int = Field(5, description="Number of top results to return", ge=1, le=20)
+    top_k: int = Field(100, description="Number of top results to return", ge=1, le=200)
 
 class RAGSearchResult(BaseModel):
     text: str = Field(..., description="Retrieved text segment")
@@ -21,7 +22,7 @@ class RAGSearchResponse(BaseModel):
 
 class RAGGenerateRequest(BaseModel):
     query: str = Field(..., description="Question to ask about the transcript")
-    top_k: int = Field(5, description="Number of context segments to use", ge=1, le=10)
+    top_k: int = Field(100, description="Number of context segments to use", ge=1, le=200)
 
 class RAGGenerateResponse(BaseModel):
     success: bool = Field(..., description="Whether the generation was successful")
@@ -33,7 +34,6 @@ class RAGGenerateResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if generation failed")
 
 class RAGProcessRequest(BaseModel):
-    video_id: str = Field(..., description="Video ID to process")
     overwrite: bool = Field(False, description="Whether to overwrite existing data")
 
 class RAGProcessResponse(BaseModel):
@@ -43,6 +43,11 @@ class RAGProcessResponse(BaseModel):
     collection_name: Optional[str] = Field(None, description="Name of the created collection")
     error: Optional[str] = Field(None, description="Error message if processing failed")
 
+class RAGCollection(BaseModel):
+    name: str = Field(..., description="Name of the collection (video_id)")
+    count: int = Field(..., description="Number of chunks in the collection")
+    last_updated: Optional[datetime] = Field(None, description="Last update timestamp")
+
 class RAGListResponse(BaseModel):
-    video_ids: List[str] = Field(default_factory=list, description="List of video IDs with RAG data")
+    collections: List[RAGCollection] = Field(default_factory=list, description="List of RAG collections")
     count: int = Field(..., description="Number of videos with RAG data") 

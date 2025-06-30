@@ -5,7 +5,6 @@ from datetime import datetime
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-import re
 
 # Try to import ChromaDB, but make it optional
 try:
@@ -84,6 +83,7 @@ class InMemoryVectorStore:
         collection['embeddings'].extend(embeddings)
         collection['metadatas'].extend(metadatas)
         collection['ids'].extend(ids)
+        collection['last_updated'] = datetime.now()
     
     def query_collection(self, collection_name: str, query_embedding: List[float], 
                         n_results: int = 5) -> Dict[str, Any]:
@@ -118,8 +118,15 @@ class InMemoryVectorStore:
         if name in self.collections:
             del self.collections[name]
     
-    def list_collections(self) -> List[str]:
-        return list(self.collections.keys())
+    def list_collections(self) -> List[Dict[str, Any]]:
+        detailed_collections = []
+        for name, collection in self.collections.items():
+            detailed_collections.append({
+                "name": name.replace("transcript_", ""),
+                "count": len(collection['documents']),
+                "last_updated": collection.get('last_updated')
+            })
+        return detailed_collections
 
 class RAGService:
     """Service for Retrieval-Augmented Generation using transcript data"""
@@ -175,6 +182,11 @@ class RAGService:
         try:
             collection_name = f"transcript_{video_id}"
             
+            # Update collection metadata with last updated time
+            if self.use_chromadb:
+                collection = self.get_or_create_collection(video_id)
+                collection.modify(metadata={"last_updated": datetime.now().isoformat()})
+
             # Prepare chunks for embedding
             chunks = []
             metadatas = []
@@ -231,7 +243,7 @@ class RAGService:
             logger.error(f"Error processing transcript for {video_id}: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def search_transcript(self, video_id: str, query: str, top_k: int = 5) -> Dict[str, Any]:
+    def search_transcript(self, video_id: str, query: str, top_k: int = 100) -> Dict[str, Any]:
         """Search for relevant segments in a video's transcript"""
         try:
             collection_name = f"transcript_{video_id}"
@@ -272,14 +284,16 @@ class RAGService:
                 "success": True,
                 "query": query,
                 "results": search_results,
-                "video_id": video_id
+                "video_id": video_id,
+                "retrieval_only": not self.openai_client,
+                "error": "OpenAI client not available or API key missing"
             }
             
         except Exception as e:
             logger.error(f"Error searching transcript for {video_id}: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def generate_rag_response(self, video_id: str, query: str, top_k: int = 5) -> Dict[str, Any]:
+    def generate_rag_response(self, video_id: str, query: str, top_k: int = 100) -> Dict[str, Any]:
         """Generate a response using RAG: retrieve relevant segments and generate answer"""
         try:
             # First, search for relevant content
@@ -342,33 +356,35 @@ Please answer the question based on the provided transcript segments."""
             logger.error(f"Error generating RAG response for {video_id}: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def list_video_collections(self) -> List[str]:
-        """List all video collections in the database"""
-        try:
-            if self.use_chromadb:
+    def list_video_collections(self) -> List[Dict[str, Any]]:
+        """List all video collections with details"""
+        if self.use_chromadb:
+            try:
                 collections = self.chroma_client.list_collections()
-                video_ids = []
-                # Handle both old and new ChromaDB versions
-                if isinstance(collections, list):
-                    for collection in collections:
-                        # New version returns collection names as strings
-                        if isinstance(collection, str):
-                            if collection.startswith("transcript_"):
-                                video_id = collection.replace("transcript_", "")
-                                video_ids.append(video_id)
-                        # Old version returns collection objects
-                        else:
-                            collection_name = getattr(collection, 'name', str(collection))
-                            if collection_name.startswith("transcript_"):
-                                video_id = collection_name.replace("transcript_", "")
-                                video_ids.append(video_id)
-                return video_ids
-            else:
-                collections = self.vector_store.list_collections()
-                return [c.replace("transcript_", "") for c in collections if c.startswith("transcript_")]
-        except Exception as e:
-            logger.error(f"Error listing collections: {str(e)}")
-            return []
+                detailed_collections = []
+                for collection in collections:
+                    if collection.name.startswith("transcript_"):
+                        metadata = collection.metadata or {}
+                        last_updated_str = metadata.get("last_updated") or metadata.get("created_at")
+                        last_updated = None
+                        if last_updated_str:
+                            try:
+                                last_updated = datetime.fromisoformat(last_updated_str)
+                            except (ValueError, TypeError):
+                                last_updated = None
+
+                        detailed_collections.append({
+                            "name": collection.name.replace("transcript_", ""),
+                            "count": collection.count(),
+                            "last_updated": last_updated
+                        })
+                return detailed_collections
+            except Exception as e:
+                logger.error(f"Failed to list ChromaDB collections: {e}")
+                return []
+        else:
+            # This is for the in-memory fallback
+            return self.vector_store.list_collections()
     
     def delete_video_collection(self, video_id: str) -> bool:
         """Delete a video's collection from the database"""

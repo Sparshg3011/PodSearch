@@ -13,8 +13,11 @@ database = Database()
 
 async def connect_to_mongo():
     """Create database connection"""
-    mongodb_url = os.getenv("MONGODB_URL")
+    mongodb_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     database_name = os.getenv("DATABASE_NAME", "podsearch")
+    
+    print(f"Connecting to MongoDB at: {mongodb_url}")
+    print(f"Using database: {database_name}")
     
     from motor.motor_asyncio import AsyncIOMotorClient
     database.client = AsyncIOMotorClient(mongodb_url)
@@ -26,6 +29,8 @@ async def connect_to_mongo():
         database=database.database,
         document_models=[TranscriptSegmentDB]
     )
+    
+    print("MongoDB connection and Beanie initialization complete")
 
 async def close_mongo_connection():
     """Close database connection"""
