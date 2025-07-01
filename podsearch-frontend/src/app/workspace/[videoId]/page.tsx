@@ -81,17 +81,14 @@ export default function WorkspacePage() {
 
   // Initialize workspace with video data
   useEffect(() => {
-    if (videoId && !workspace.currentVideo && !isInitializing) {
-      console.log('Initializing workspace for video:', videoId);
+    if (videoId && !workspace.currentVideo) {
       initializeWorkspace();
     } else if (workspace.currentVideo && workspace.currentVideo.id === videoId) {
-      console.log('Video already loaded, skipping initialization');
       setIsLoading(false);
     } else if (!videoId) {
-      console.log('No videoId provided');
       setIsLoading(false);
     }
-  }, [videoId, workspace.currentVideo, isInitializing]);
+  }, [videoId, workspace.currentVideo]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -99,34 +96,26 @@ export default function WorkspacePage() {
   }, [workspace.chatMessages]);
 
   const initializeWorkspace = async () => {
-    if (isInitializing) {
-      console.log('Already initializing, skipping...');
-      return;
-    }
+    if (isInitializing) return;
 
     try {
       setIsInitializing(true);
       setIsLoading(true);
-      console.log('Starting workspace initialization...');
       
-      // First fetch video metadata (this is fast)
-      console.log('Fetching video data...');
       const videoData = await fetchVideoData();
       if (!videoData) {
         throw new Error('Failed to fetch video data');
       }
       
-      console.log('Video data fetched:', videoData.title);
       setCurrentVideo(videoData);
-      
-      // Then process transcript (this might take longer)
-      console.log('Starting transcript processing...');
       await processTranscriptForRAG();
-      console.log('Workspace initialization completed');
       
     } catch (error: any) {
       console.error('Workspace initialization error:', error);
       toast.error('Failed to initialize workspace');
+      setCurrentVideo(null);
+      setRagReady(false);
+      setIsProcessed(false);
     } finally {
       setIsInitializing(false);
       setIsLoading(false);
@@ -135,8 +124,6 @@ export default function WorkspacePage() {
 
   const fetchVideoData = async () => {
     try {
-      // For now, create a basic video object with the ID
-      // In a real app, you'd fetch this from an API
       const videoData = {
         id: videoId,
         title: 'Loading...',
@@ -151,7 +138,6 @@ export default function WorkspacePage() {
         available_languages: []
       };
       
-      // Try to get actual video data from localStorage or search results
       const savedSearchResults = localStorage.getItem('recentSearchResults');
       if (savedSearchResults) {
         const results = JSON.parse(savedSearchResults);
@@ -171,27 +157,26 @@ export default function WorkspacePage() {
   const processTranscriptForRAG = async () => {
     try {
       setIsProcessing(true);
-      console.log('Starting RAG processing for video:', videoId);
       
-      // Get transcript
-      console.log('Fetching transcript...');
-      const startTime = Date.now();
       const transcriptResponse = await transcriptApi.getTranscript(videoId);
-      console.log(`Transcript fetched in ${Date.now() - startTime}ms, segments:`, transcriptResponse.segments.length);
+      
+      if (!transcriptResponse.success) {
+        throw new Error(transcriptResponse.metadata?.error || 'Failed to extract transcript');
+      }
+      
+      if (!transcriptResponse.segments || transcriptResponse.segments.length === 0) {
+        throw new Error('No transcript segments found');
+      }
+      
       setTranscript(transcriptResponse.segments);
       
-      // Process for RAG
-      console.log('Processing transcript for RAG...');
-      const ragStartTime = Date.now();
       const ragResponse = await ragApi.processTranscript(videoId, { overwrite: false });
-      console.log(`RAG processing completed in ${Date.now() - ragStartTime}ms:`, ragResponse);
       
       if (ragResponse.success) {
         setRagReady(true);
         setIsProcessed(true);
         toast.success('Video processed successfully!');
       } else if (ragResponse.error?.includes('already processed')) {
-        // Video is already processed, this is actually good!
         setRagReady(true);
         setIsProcessed(true);
         toast.success('Video is ready for chat!');
@@ -203,15 +188,22 @@ export default function WorkspacePage() {
       console.error('Processing error:', error);
       if (error.response?.status === 404) {
         toast.error('Video transcript not found');
+      } else if (error.message?.includes('transcript')) {
+        toast.error(`Transcript error: ${error.message}`);
       } else {
         toast.error('Failed to process video for AI search');
       }
-      // Don't leave it in loading state forever
       setRagReady(false);
       setIsProcessed(false);
+      throw error;
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Add a retry function for manual retries
+  const retryProcessing = async () => {
+    await initializeWorkspace();
   };
 
   const handleChatSubmit = async (e: React.FormEvent) => {
@@ -221,13 +213,11 @@ export default function WorkspacePage() {
     const userMessage = chatInput.trim();
     setChatInput('');
 
-    // Add user message
     addChatMessage({
       type: 'user',
       content: userMessage,
     });
 
-    // Add assistant loading message
     addChatMessage({
       type: 'assistant',
       content: '',
@@ -235,21 +225,18 @@ export default function WorkspacePage() {
     });
 
     try {
-      // Generate RAG response
       const ragResponse = await ragApi.generateResponse(videoId, {
         query: userMessage,
         top_k: 100,
       });
 
       if (ragResponse.success) {
-        // Update the last message with the response
         updateLastMessage({
           content: ragResponse.answer,
           sources: ragResponse.sources,
           isTyping: false,
         });
 
-        // Automatically fact-check the response
         if (ragResponse.answer) {
           await factCheckResponse(ragResponse.answer, ragResponse);
         }
@@ -282,7 +269,6 @@ export default function WorkspacePage() {
       if (factCheckResponse.success && factCheckResponse.verifications.length > 0) {
         setCurrentFactCheck(factCheckResponse.verifications);
         
-        // Update the last message with fact-check results
         updateLastMessage({
           factCheck: factCheckResponse.verifications,
         });
@@ -374,7 +360,6 @@ export default function WorkspacePage() {
 
         {/* Right Panel - Transcript & Chat */}
         <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
-          {/* Tab Navigation */}
           <div className="flex border-b border-gray-200">
             {[
               { id: 'chat', label: 'Chat', icon: MessageCircle },
@@ -396,12 +381,9 @@ export default function WorkspacePage() {
             ))}
           </div>
 
-          {/* Tab Content */}
           <div className="flex-1 overflow-hidden">
-            {/* Chat Tab */}
             {currentTab === 'chat' && (
               <div className="h-full flex flex-col">
-                {/* Chat Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {workspace.chatMessages.length === 0 ? (
                     <div className="text-center text-gray-500 mt-8">
@@ -432,7 +414,6 @@ export default function WorkspacePage() {
                               <>
                                 <p className="text-sm">{message.content}</p>
                                 
-                                {/* Sources */}
                                 {message.sources && message.sources.length > 0 && (
                                   <div className="mt-2 pt-2 border-t border-gray-200">
                                     <p className="text-xs font-medium mb-1">Sources:</p>
@@ -450,7 +431,6 @@ export default function WorkspacePage() {
                                   </div>
                                 )}
 
-                                {/* Fact Check */}
                                 {message.factCheck && message.factCheck.length > 0 && (
                                   <div className="mt-2 pt-2 border-t border-gray-200">
                                     <div className="flex items-center justify-between mb-1">
@@ -471,7 +451,6 @@ export default function WorkspacePage() {
                                   </div>
                                 )}
 
-                                {/* Action Buttons */}
                                 {message.type === 'assistant' && !message.isTyping && (
                                   <div className="flex items-center space-x-2 mt-2">
                                     <Button
@@ -493,7 +472,6 @@ export default function WorkspacePage() {
                   )}
                 </div>
 
-                {/* Chat Input */}
                 <div className="p-4 border-t border-gray-200">
                   <form onSubmit={handleChatSubmit} className="flex space-x-2">
                     <Input
@@ -517,13 +495,30 @@ export default function WorkspacePage() {
                     <p className="text-xs text-gray-500 mt-2">Processing transcript...</p>
                   )}
                   {!workspace.ragReady && !workspace.isProcessing && (
-                    <p className="text-xs text-gray-500 mt-2">Transcript not ready for chat</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-gray-500">Transcript not ready for chat</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={retryProcessing}
+                        disabled={isInitializing}
+                        className="text-xs px-2 py-1"
+                      >
+                        {isInitializing ? (
+                          <>
+                            <LoadingSpinner size="sm" className="mr-1" />
+                            Retrying...
+                          </>
+                        ) : (
+                          'Retry'
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Transcript Tab */}
             {currentTab === 'transcript' && (
               <div className="h-full overflow-y-auto p-4">
                 {workspace.transcript.length > 0 ? (
@@ -554,7 +549,6 @@ export default function WorkspacePage() {
               </div>
             )}
 
-            {/* Facts Tab */}
             {currentTab === 'facts' && (
               <div className="h-full overflow-y-auto p-4">
                 {workspace.currentFactCheck && workspace.currentFactCheck.length > 0 ? (

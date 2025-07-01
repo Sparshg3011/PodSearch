@@ -26,7 +26,11 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
             transcript_result = transcript_service.extract_transcript(video_id)
             
             if not transcript_result["success"]:
-                raise HTTPException(status_code=404, detail=f"Could not fetch transcript: {transcript_result['error']}")
+                return RAGProcessResponse(
+                    success=False,
+                    video_id=video_id,
+                    error=f"Could not fetch transcript: {transcript_result['error']}"
+                )
             
             # Convert TranscriptSegment objects to dict format
             formatted_segments = []
@@ -74,10 +78,12 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
                 error=result["error"]
             )
             
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return RAGProcessResponse(
+            success=False,
+            video_id=video_id,
+            error=f"Processing failed: {str(e)}"
+        )
 
 @router.post("/search/{video_id}", response_model=RAGSearchResponse)
 async def search_transcript(video_id: str, request: RAGSearchRequest):
@@ -86,9 +92,11 @@ async def search_transcript(video_id: str, request: RAGSearchRequest):
         # Check if video has been processed
         existing_collections = rag_service.list_video_collections()
         if video_id not in [c['name'] for c in existing_collections]:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
+            return RAGSearchResponse(
+                success=False,
+                query=request.query,
+                video_id=video_id,
+                error=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
             )
         
         # Perform search
@@ -118,10 +126,13 @@ async def search_transcript(video_id: str, request: RAGSearchRequest):
                 error=result["error"]
             )
             
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return RAGSearchResponse(
+            success=False,
+            query=request.query,
+            video_id=video_id,
+            error=f"Search failed: {str(e)}"
+        )
 
 @router.post("/generate/{video_id}", response_model=RAGGenerateResponse) 
 async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
@@ -130,9 +141,12 @@ async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
         # Check if video has been processed
         existing_collections = rag_service.list_video_collections()
         if video_id not in [c['name'] for c in existing_collections]:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
+            return RAGGenerateResponse(
+                success=False,
+                query=request.query,
+                video_id=video_id,
+                answer="",
+                error=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
             )
         
         # Generate response
@@ -165,10 +179,14 @@ async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
                 error=result["error"]
             )
             
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return RAGGenerateResponse(
+            success=False,
+            query=request.query,
+            video_id=video_id,
+            answer="",
+            error=f"Generation failed: {str(e)}"
+        )
 
 @router.get("/list", response_model=RAGListResponse)
 async def list_processed_videos():
@@ -200,18 +218,54 @@ async def delete_video_rag_data(video_id: str):
 
 @router.get("/health")
 async def rag_health_check():
-    """Health check for RAG service"""
+    """Enhanced health check for RAG service with accuracy features report"""
     try:
         video_count = len(rag_service.list_video_collections())
+        
+        # Detect embedding model being used
+        embedding_model_name = getattr(rag_service.embedding_model, 'model_name', 'unknown')
+        
+        # Check if OpenAI is available for LLM generation
+        openai_available = rag_service.openai_client is not None
+        
+        # Check vector store type
+        vector_store_type = "ChromaDB" if rag_service.use_chromadb else "In-Memory"
+        
         return {
             "status": "healthy",
-            "service": "RAG",
+            "service": "Enhanced RAG",
+            "version": "2.0",
             "processed_videos": video_count,
-            "embedding_model": "all-MiniLM-L6-v2",
-            "vector_store": "ChromaDB"
+            "embedding_model": embedding_model_name,
+            "vector_store": vector_store_type,
+            "openai_available": openai_available,
+            "enhanced_features": {
+                "sentence_aware_chunking": True,
+                "chunk_size": 800,
+                "chunk_overlap": 100,
+                "query_enhancement": True,
+                "relevance_filtering": True,
+                "relevance_threshold": 0.3,
+                "context_organization": True,
+                "enhanced_prompts": True,
+                "gpt4_support": True,
+                "max_chunks": 2000,
+                "temperature": 0.1
+            },
+            "accuracy_improvements": [
+                "Better sentence boundary detection",
+                "Improved embedding model (all-mpnet-base-v2)",
+                "Query variation generation",
+                "Duplicate filtering and re-ranking",
+                "High/medium relevance context organization",
+                "Specialized video transcript prompts",
+                "Lower temperature for consistency",
+                "GPT-4 with fallback to GPT-3.5-turbo"
+            ]
         }
     except Exception as e:
         return {
             "status": "unhealthy",
-            "error": str(e)
+            "error": str(e),
+            "service": "Enhanced RAG"
         } 

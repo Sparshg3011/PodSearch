@@ -25,6 +25,7 @@ export interface TranscriptSegment {
 }
 
 export interface TranscriptWithTimestampsResponse {
+  success: boolean;
   video_id: string;
   segments: TranscriptSegment[];
   metadata: Record<string, any>;

@@ -1,5 +1,8 @@
 from typing import Optional, List
 import os
+import json
+import subprocess
+import tempfile
 from datetime import datetime
 from dotenv import load_dotenv
 from ..models.youtube import TranscriptSegment
@@ -14,21 +17,30 @@ try:
 except ImportError:
     SUPADATA_AVAILABLE = False
 
+# Check if yt-dlp is available
+try:
+    subprocess.run(['yt-dlp', '--version'], capture_output=True, check=True)
+    YT_DLP_AVAILABLE = True
+except (subprocess.CalledProcessError, FileNotFoundError):
+    YT_DLP_AVAILABLE = False
+
 class TranscriptService:
-    """Service for extracting YouTube transcripts using Supadata API"""
+    """Service for extracting YouTube transcripts using multiple fallback methods"""
     
     def __init__(self):
         if SUPADATA_AVAILABLE:
             api_key = os.getenv("SUPADATA_API_KEY")
-            if not api_key:
-                raise ValueError("SUPADATA_API_KEY environment variable is required")
-            self.client = Supadata(api_key=api_key)
+            if api_key:
+                self.client = Supadata(api_key=api_key)
+            else:
+                self.client = None
+                print("Warning: SUPADATA_API_KEY not found, will use fallback methods")
         else:
             self.client = None
     
     def extract_transcript(self, video_id: str, language: str = "en") -> dict:
         """
-        Extract transcript for a given video ID
+        Extract transcript for a given video ID using multiple fallback methods
         
         Args:
             video_id: YouTube video ID
@@ -37,15 +49,39 @@ class TranscriptService:
         Returns:
             dict with transcript data and metadata
         """
-        if not SUPADATA_AVAILABLE or not self.client:
-            return {
-                "success": False,
-                "error": "Supadata library not available",
-                "transcript": None,
-                "segments": [],
-                "metadata": {}
-            }
+        # Try Supadata first if available
+        if SUPADATA_AVAILABLE and self.client:
+            try:
+                result = self._extract_with_supadata(video_id, language)
+                if result["success"]:
+                    return result
+                else:
+                    print(f"Supadata failed: {result['error']}. Trying fallback methods...")
+            except Exception as e:
+                print(f"Supadata error: {str(e)}. Trying fallback methods...")
         
+        # Fallback to yt-dlp if Supadata fails or is unavailable
+        if YT_DLP_AVAILABLE:
+            try:
+                result = self._extract_with_ytdlp(video_id, language)
+                if result["success"]:
+                    return result
+                else:
+                    print(f"yt-dlp failed: {result['error']}")
+            except Exception as e:
+                print(f"yt-dlp error: {str(e)}")
+        
+        # If all methods fail
+        return {
+            "success": False,
+            "error": "All transcript extraction methods failed. Supadata limit exceeded and yt-dlp not available or failed.",
+            "transcript": None,
+            "segments": [],
+            "metadata": {"video_id": video_id, "language": language}
+        }
+
+    def _extract_with_supadata(self, video_id: str, language: str = "en") -> dict:
+        """Extract transcript using Supadata API"""
         try:
             transcript_result = self.client.youtube.transcript(video_id=video_id, lang=language)
             
@@ -98,7 +134,232 @@ class TranscriptService:
                 "segments": [],
                 "metadata": {"video_id": video_id, "language": language}
             }
-    
+
+    def _extract_with_ytdlp(self, video_id: str, language: str = "en") -> dict:
+        """Extract transcript using yt-dlp as fallback"""
+        try:
+            # Use yt-dlp to extract transcript
+            cmd = [
+                'yt-dlp',
+                f'https://www.youtube.com/watch?v={video_id}',
+                '--write-auto-sub',
+                '--write-sub',
+                '--sub-langs', f'{language},en',
+                '--skip-download',
+                '--sub-format', 'json3',
+                '--output', f'%(id)s.%(ext)s'
+            ]
+            
+            # Use temporary directory
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Change to temp directory
+                old_cwd = os.getcwd()
+                os.chdir(temp_dir)
+                
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    
+                    # Look for subtitle files
+                    subtitle_files = []
+                    for file in os.listdir('.'):
+                        if file.startswith(video_id) and ('.json3' in file or '.vtt' in file):
+                            subtitle_files.append(file)
+                    
+                    if not subtitle_files:
+                        return {
+                            "success": False,
+                            "error": "No subtitle files found",
+                            "transcript": None,
+                            "segments": [],
+                            "metadata": {"video_id": video_id, "language": language}
+                        }
+                    
+                    # Try to parse JSON3 format first
+                    for subtitle_file in subtitle_files:
+                        if '.json3' in subtitle_file:
+                            try:
+                                with open(subtitle_file, 'r', encoding='utf-8') as f:
+                                    subtitle_data = json.load(f)
+                                
+                                segments = self._parse_json3_subtitles(subtitle_data)
+                                if segments:
+                                    text_content = " ".join([seg.text for seg in segments])
+                                    
+                                    return {
+                                        "success": True,
+                                        "error": None,
+                                        "transcript": text_content,
+                                        "segments": segments,
+                                        "metadata": {
+                                            "video_id": video_id,
+                                            "language": language,
+                                            "length": len(text_content),
+                                            "segment_count": len(segments),
+                                            "timestamp": datetime.now().isoformat(),
+                                            "source": "yt-dlp"
+                                        }
+                                    }
+                            except Exception as e:
+                                print(f"Error parsing JSON3 subtitle file: {e}")
+                                continue
+                    
+                    # If JSON3 parsing failed, try VTT format
+                    for subtitle_file in subtitle_files:
+                        if '.vtt' in subtitle_file:
+                            try:
+                                with open(subtitle_file, 'r', encoding='utf-8') as f:
+                                    vtt_content = f.read()
+                                
+                                segments = self._parse_vtt_subtitles(vtt_content)
+                                if segments:
+                                    text_content = " ".join([seg.text for seg in segments])
+                                    
+                                    return {
+                                        "success": True,
+                                        "error": None,
+                                        "transcript": text_content,
+                                        "segments": segments,
+                                        "metadata": {
+                                            "video_id": video_id,
+                                            "language": language,
+                                            "length": len(text_content),
+                                            "segment_count": len(segments),
+                                            "timestamp": datetime.now().isoformat(),
+                                            "source": "yt-dlp"
+                                        }
+                                    }
+                            except Exception as e:
+                                print(f"Error parsing VTT subtitle file: {e}")
+                                continue
+                    
+                    return {
+                        "success": False,
+                        "error": "Could not parse any subtitle files",
+                        "transcript": None,
+                        "segments": [],
+                        "metadata": {"video_id": video_id, "language": language}
+                    }
+                    
+                finally:
+                    os.chdir(old_cwd)
+                    
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": "yt-dlp operation timed out",
+                "transcript": None,
+                "segments": [],
+                "metadata": {"video_id": video_id, "language": language}
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"yt-dlp error: {str(e)}",
+                "transcript": None,
+                "segments": [],
+                "metadata": {"video_id": video_id, "language": language}
+            }
+
+    def _parse_json3_subtitles(self, subtitle_data) -> List[TranscriptSegment]:
+        """Parse JSON3 subtitle format from yt-dlp"""
+        segments = []
+        
+        try:
+            if 'events' in subtitle_data:
+                for event in subtitle_data['events']:
+                    if 'segs' in event and event.get('tStartMs') is not None:
+                        text_parts = []
+                        for seg in event['segs']:
+                            if 'utf8' in seg:
+                                text_parts.append(seg['utf8'])
+                        
+                        if text_parts:
+                            text = ''.join(text_parts).strip()
+                            if text and text not in ['\n', ' ', '']:
+                                timestamp = event['tStartMs'] / 1000.0
+                                segments.append(TranscriptSegment(
+                                    text=text,
+                                    timestamp=timestamp
+                                ))
+        except Exception as e:
+            print(f"Error parsing JSON3 format: {e}")
+        
+        return segments
+
+    def _parse_vtt_subtitles(self, vtt_content: str) -> List[TranscriptSegment]:
+        """Parse VTT subtitle format"""
+        segments = []
+        
+        try:
+            lines = vtt_content.split('\n')
+            i = 0
+            
+            while i < len(lines):
+                line = lines[i].strip()
+                
+                # Look for timestamp lines (format: 00:00:01.000 --> 00:00:04.000)
+                if '-->' in line:
+                    timestamp_parts = line.split(' --> ')
+                    if len(timestamp_parts) == 2:
+                        start_time = self._parse_vtt_timestamp(timestamp_parts[0])
+                        
+                        # Get the text (next non-empty lines until empty line or next timestamp)
+                        i += 1
+                        text_parts = []
+                        while i < len(lines) and lines[i].strip() and '-->' not in lines[i]:
+                            text_line = lines[i].strip()
+                            # Remove VTT formatting tags
+                            text_line = self._clean_vtt_text(text_line)
+                            if text_line:
+                                text_parts.append(text_line)
+                            i += 1
+                        
+                        if text_parts:
+                            text = ' '.join(text_parts)
+                            if text:
+                                segments.append(TranscriptSegment(
+                                    text=text,
+                                    timestamp=start_time
+                                ))
+                        continue
+                
+                i += 1
+                
+        except Exception as e:
+            print(f"Error parsing VTT format: {e}")
+        
+        return segments
+
+    def _parse_vtt_timestamp(self, timestamp_str: str) -> float:
+        """Parse VTT timestamp to seconds"""
+        try:
+            # Format: 00:00:01.000 or 01.000
+            timestamp_str = timestamp_str.strip()
+            
+            if ':' in timestamp_str:
+                parts = timestamp_str.split(':')
+                if len(parts) == 3:  # HH:MM:SS.mmm
+                    hours = int(parts[0])
+                    minutes = int(parts[1])
+                    seconds = float(parts[2])
+                    return hours * 3600 + minutes * 60 + seconds
+                elif len(parts) == 2:  # MM:SS.mmm
+                    minutes = int(parts[0])
+                    seconds = float(parts[1])
+                    return minutes * 60 + seconds
+            else:
+                # Just seconds
+                return float(timestamp_str)
+        except:
+            return 0.0
+
+    def _clean_vtt_text(self, text: str) -> str:
+        """Remove VTT formatting tags from text"""
+        import re
+        # Remove VTT tags like <c.colorE5E5E5>, </c>, etc.
+        text = re.sub(r'<[^>]+>', '', text)
+        return text.strip()
+
     def _process_transcript_content_with_timestamps(self, content) -> dict:
         """
         Process transcript content and extract segments with timestamps
