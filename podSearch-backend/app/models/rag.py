@@ -4,7 +4,7 @@ from datetime import datetime
 
 class RAGSearchRequest(BaseModel):
     query: str = Field(..., description="Search query for transcript content")
-    top_k: int = Field(100, description="Number of top results to return", ge=1, le=200)
+    top_k: int = Field(100, description="Number of top results to return", ge=1, le=2000)
 
 class RAGSearchResult(BaseModel):
     text: str = Field(..., description="Retrieved text segment")
@@ -22,7 +22,7 @@ class RAGSearchResponse(BaseModel):
 
 class RAGGenerateRequest(BaseModel):
     query: str = Field(..., description="Question to ask about the transcript")
-    top_k: int = Field(100, description="Number of context segments to use", ge=1, le=200)
+    top_k: int = Field(100, description="Number of context segments to use", ge=1, le=2000)
 
 class RAGGenerateResponse(BaseModel):
     success: bool = Field(..., description="Whether the generation was successful")
