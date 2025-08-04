@@ -6,10 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { 
   Search,
   Home,
-  Settings,
   BookOpen,
-  Moon,
-  Sun,
   Menu,
   X,
   Headphones
@@ -29,7 +26,7 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const pathname = usePathname();
   const ui = useUIState();
-  const { setTheme, setSidebarOpen } = useUIActions();
+  const { setSidebarOpen } = useUIActions();
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home, current: pathname === '/' },
@@ -37,9 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({
     { name: 'Saved', href: '/saved', icon: BookOpen, current: pathname === '/saved' },
   ];
 
-  const toggleTheme = () => {
-    setTheme(ui.theme === 'light' ? 'dark' : 'light');
-  };
+
 
   return (
     <div className={clsx('min-h-screen bg-gray-50', ui.theme === 'dark' && 'dark')}>
@@ -141,30 +136,7 @@ export const Layout: React.FC<LayoutProps> = ({
               <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
             </div>
             
-            <div className="flex items-center space-x-4">
-              {/* Theme toggle */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                {ui.theme === 'light' ? (
-                  <Moon className="h-5 w-5" />
-                ) : (
-                  <Sun className="h-5 w-5" />
-                )}
-              </Button>
-              
-              {/* Settings */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <Settings className="h-5 w-5" />
-              </Button>
-            </div>
+
           </div>
         </div>
 

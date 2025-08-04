@@ -75,20 +75,22 @@ export default function WorkspacePage() {
   const [currentTab, setCurrentTab] = useState<'chat' | 'transcript' | 'facts'>('chat');
   const [selectedClaim, setSelectedClaim] = useState<ClaimVerification | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
   
   const playerRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize workspace with video data
   useEffect(() => {
-    if (videoId && !workspace.currentVideo) {
+    if (videoId && !workspace.currentVideo && !hasInitialized && !initializationError) {
       initializeWorkspace();
     } else if (workspace.currentVideo && workspace.currentVideo.id === videoId) {
       setIsLoading(false);
     } else if (!videoId) {
       setIsLoading(false);
     }
-  }, [videoId, workspace.currentVideo]);
+  }, [videoId, workspace.currentVideo, hasInitialized, initializationError]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -101,6 +103,7 @@ export default function WorkspacePage() {
     try {
       setIsInitializing(true);
       setIsLoading(true);
+      setInitializationError(null);
       
       const videoData = await fetchVideoData();
       if (!videoData) {
@@ -109,17 +112,27 @@ export default function WorkspacePage() {
       
       setCurrentVideo(videoData);
       await processTranscriptForRAG();
+      setHasInitialized(true);
       
     } catch (error: any) {
       console.error('Workspace initialization error:', error);
-      toast.error('Failed to initialize workspace');
-      setCurrentVideo(null);
+      const errorMessage = error.message || 'Failed to initialize workspace';
+      setInitializationError(errorMessage);
+      toast.error(errorMessage);
+      // Don't clear currentVideo on error - keep the video data
       setRagReady(false);
       setIsProcessed(false);
+      setHasInitialized(true); // Prevent infinite retries
     } finally {
       setIsInitializing(false);
       setIsLoading(false);
     }
+  };
+
+  const retryInitialization = () => {
+    setHasInitialized(false);
+    setInitializationError(null);
+    initializeWorkspace();
   };
 
   const fetchVideoData = async () => {
@@ -176,7 +189,7 @@ export default function WorkspacePage() {
         setRagReady(true);
         setIsProcessed(true);
         toast.success('Video processed successfully!');
-      } else if (ragResponse.error?.includes('already processed')) {
+      } else if (ragResponse.error?.includes('Video already processed')) {
         setRagReady(true);
         setIsProcessed(true);
         toast.success('Video is ready for chat!');
@@ -295,6 +308,27 @@ export default function WorkspacePage() {
     return (
       <Layout title="Loading Workspace">
         <PageLoading message="Preparing your workspace..." />
+      </Layout>
+    );
+  }
+
+  if (initializationError) {
+    return (
+      <Layout title="Workspace Error">
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-gray-900">Failed to Load Workspace</h2>
+            <p className="text-gray-600">{initializationError}</p>
+            <Button 
+              onClick={retryInitialization}
+              disabled={isInitializing}
+              className="mt-4"
+            >
+              {isInitializing ? 'Retrying...' : 'Try Again'}
+            </Button>
+          </div>
+        </div>
       </Layout>
     );
   }

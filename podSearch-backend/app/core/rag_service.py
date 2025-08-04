@@ -441,11 +441,22 @@ class RAGService:
                 return search_results
             
             if not self.openai_client:
+                # Create a better formatted fallback response
+                segments = search_results["results"][:5]  # Top 5 most relevant
+                fallback_answer = "Based on the most relevant transcript segments:\n\n"
+                
+                for i, segment in enumerate(segments, 1):
+                    timestamp = segment.get("timestamp", 0)
+                    timestamp_str = f"[{int(timestamp // 60):02d}:{int(timestamp % 60):02d}]"
+                    fallback_answer += f"- {timestamp_str} {segment['text']}\n"
+                
+                fallback_answer += "\nNote: AI analysis unavailable - showing raw transcript segments"
+                
                 return {
                     "success": True,
                     "query": query,
                     "video_id": video_id,
-                    "answer": "LLM not available. Here are the relevant transcript segments:",
+                    "answer": fallback_answer,
                     "sources": search_results["results"],
                     "retrieval_only": True
                 }
@@ -458,7 +469,7 @@ class RAGService:
                     "success": True,
                     "query": query,
                     "video_id": video_id,
-                    "answer": "No relevant transcript segments found for this query. The video may not contain information related to your question.",
+                    "answer": "No Results Found\n\nThis video doesn't appear to contain information related to your question.\n\nTry:\n- Rephrasing your query with different keywords\n- Asking about the general topic or theme\n- Checking if this is the correct video",
                     "sources": [],
                     "retrieval_only": False,
                     "high_relevance_count": 0,
@@ -505,27 +516,43 @@ class RAGService:
             context = "\n\n".join(context_parts)
             
             # Enhanced system prompt for video transcripts
-            system_prompt = """You are an expert AI assistant specialized in analyzing video transcripts. Your task is to provide accurate, detailed answers based on the provided transcript segments.
+            system_prompt = """You are a helpful assistant that analyzes podcast transcripts. Provide clear, concise, and actionable answers.
 
-INSTRUCTIONS:
-1. Analyze the transcript segments carefully and provide comprehensive answers
-2. Always cite specific timestamps when referencing parts of the video
-3. If information is incomplete or unclear, explicitly state what's missing
-4. Organize your response clearly with main points and supporting details
-5. Use the most relevant segments first, then supporting context
-6. Be precise and avoid speculation beyond what's in the transcript
-7. If the transcript doesn't contain enough information, clearly state this limitation
+FORMATTING RULES:
+- Start with the direct answer (1-2 sentences)
+- Use line breaks and clear spacing for readability
+- Use simple text formatting with proper spacing
+- Be confident and definitive based on evidence
+- Skip unnecessary hedging ("it's difficult to determine")
+- Use timestamps strategically when they add value
 
-RESPONSE FORMAT:
-- Start with a direct answer to the question
-- Provide detailed explanation with timestamp references
-- End with any limitations or areas needing clarification"""
+STRUCTURE:
+1. Direct answer first
+2. Blank line
+3. "Key Points:" (followed by list items with dashes)
+4. Blank line  
+5. "Evidence:" (if timestamps add value)
+
+KEEP IT CONCISE: 150-300 words maximum. Use clear line breaks and spacing for readability."""
             
-            user_prompt = f"""Based on the video transcript segments below, please answer this question: {query}
+            user_prompt = f"""Question: {query}
 
+Transcript Segments:
 {context}
 
-Please provide a comprehensive answer with specific timestamp references where relevant."""
+Provide a clear, concise answer following this format:
+
+Direct answer (1-2 sentences)
+
+Key Points:
+- First key point
+- Second key point
+- Third key point
+
+Evidence:
+- [timestamp] relevant detail (only if timestamps add value)
+
+Use simple text with line breaks. No markdown formatting."""
 
             # Use GPT-4 for better accuracy if available, otherwise GPT-3.5-turbo
             try:
