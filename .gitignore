@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+podsearch-frontend/node_modules
 /.pnp
 .pnp.js
 
@@ -11,6 +12,8 @@
 # next.js
 /.next/
 /out/
+podsearch-frontend/.next/
+podsearch-frontend/out/
 
 # production
 /build

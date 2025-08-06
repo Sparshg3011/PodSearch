@@ -23,6 +23,7 @@ class TranscriptSegment(BaseModel):
     timestamp: Optional[float] = None
 
 class TranscriptWithTimestampsResponse(BaseModel):
+    success: bool = True
     video_id: str
     segments: List[TranscriptSegment]
     metadata: dict

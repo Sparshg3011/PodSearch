@@ -17,9 +17,16 @@ async def get_transcript_supadata(
         result = transcript_service.extract_transcript(video_id, language)
         
         if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["error"])
+            # Return error response with success=False
+            return TranscriptWithTimestampsResponse(
+                success=False,
+                video_id=video_id,
+                segments=[],
+                metadata={"error": result["error"]}
+            )
         
         response_data = TranscriptWithTimestampsResponse(
+            success=True,
             video_id=video_id,
             segments=result["segments"],
             metadata=result["metadata"]
@@ -54,10 +61,13 @@ async def get_transcript_supadata(
         
         return response_data
         
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return TranscriptWithTimestampsResponse(
+            success=False,
+            video_id=video_id,
+            segments=[],
+            metadata={"error": f"Unexpected error: {str(e)}"}
+        )
 
 @router.get("/search/{video_id}")
 async def get_transcript_from_db(video_id: str):
