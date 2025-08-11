@@ -1,0 +1,7 @@
+{
+  "/not-found": "app/not-found.js",
+  "/page": "app/page.js",
+  "/search/page": "app/search/page.js",
+  "/workspace/[videoId]/page": "app/workspace/[videoId]/page.js",
+  "/saved/page": "app/saved/page.js"
+}
