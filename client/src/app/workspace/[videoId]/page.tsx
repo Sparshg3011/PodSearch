@@ -27,7 +27,6 @@ import {
 import { 
   Send, 
   MessageCircle,
-  FileText,
   Clock,
   Bookmark,
   Share,
@@ -61,7 +60,7 @@ export default function WorkspacePage() {
   const [chatInput, setChatInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isInitializing, setIsInitializing] = useState(false);
-  const [currentTab, setCurrentTab] = useState<'chat' | 'transcript'>('chat');
+
   const [playerReady, setPlayerReady] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -457,29 +456,15 @@ export default function WorkspacePage() {
         <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
           <div className="bg-gray-50 border-b border-gray-200">
             <div className="flex p-2">
-              {[
-                { id: 'chat', label: 'Chat', icon: MessageCircle },
-                { id: 'transcript', label: 'Transcript', icon: FileText },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setCurrentTab(tab.id as any)}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 text-sm font-medium rounded-lg transition-all ${
-                    currentTab === tab.id
-                      ? 'bg-white text-primary-600 shadow-sm border border-gray-200'
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  <tab.icon className="h-4 w-4" />
-                  <span>{tab.label}</span>
-                </button>
-              ))}
+              <div className="flex-1 flex items-center justify-center space-x-2 py-3 px-4 text-sm font-medium rounded-lg bg-white text-primary-600 shadow-sm border border-gray-200">
+                <MessageCircle className="h-4 w-4" />
+                <span>Chat</span>
+              </div>
             </div>
           </div>
 
           <div className="flex-1 overflow-hidden">
-            {currentTab === 'chat' && (
-              <div className="h-full flex flex-col">
+            <div className="h-full flex flex-col">
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                   {workspace.chatMessages.length === 0 ? (
                     <div className="text-center text-gray-500 mt-12">
@@ -584,37 +569,6 @@ export default function WorkspacePage() {
                   )}
                 </div>
               </div>
-            )}
-
-            {currentTab === 'transcript' && (
-              <div className="h-full overflow-y-auto p-4">
-                {workspace.transcript.length > 0 ? (
-                  <div className="space-y-2">
-                    {workspace.transcript.map((segment, index) => (
-                      <button
-                        key={index}
-                        onClick={() => jumpToTimestamp(segment.timestamp || 0)}
-                        className="block w-full text-left p-2 rounded hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-start space-x-2">
-                          <Badge variant="outline" className="text-xs">
-                            {utils.formatTimestamp(segment.timestamp || 0)}
-                          </Badge>
-                          <p className="text-sm text-gray-700 flex-1">
-                            {segment.text}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-500 mt-8">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                    <p className="text-sm">No transcript available</p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
