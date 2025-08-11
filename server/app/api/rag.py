@@ -17,10 +17,10 @@ transcript_service = TranscriptService()
 async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest = None):
     """Process a video's transcript data for RAG functionality"""
     try:
-        # Try to get transcript data from database first
+
         segments = await transcript_service.get_transcript_from_db(video_id)
         
-        # If not in database, fetch from YouTube directly
+
         if not segments:
             print(f"Transcript not found in database for {video_id}, fetching directly...")
             transcript_result = transcript_service.extract_transcript(video_id)
@@ -32,7 +32,7 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
                     error=f"Could not fetch transcript: {transcript_result['error']}"
                 )
             
-            # Convert TranscriptSegment objects to dict format
+
             formatted_segments = []
             for segment in transcript_result["segments"]:
                 formatted_segments.append({
@@ -40,7 +40,7 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
                     "timestamp": segment.timestamp
                 })
         else:
-            # Convert database segments to the format expected by RAG service
+
             formatted_segments = []
             for segment in segments:
                 formatted_segments.append({
@@ -48,7 +48,7 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
                     "timestamp": segment.get("timestamp", 0)
                 })
         
-        # Check if collection already exists and handle overwrite
+
         existing_collections = rag_service.list_video_collections()
         if video_id in [c['name'] for c in existing_collections]:
             if request and not request.overwrite:
@@ -58,10 +58,10 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
                     error="Video already processed. Use overwrite=true to reprocess."
                 )
             else:
-                # Delete existing collection
+
                 rag_service.delete_video_collection(video_id)
         
-        # Process and store transcript
+
         result = rag_service.process_and_store_transcript(video_id, formatted_segments)
         
         if result["success"]:
@@ -89,7 +89,7 @@ async def process_transcript_for_rag(video_id: str, request: RAGProcessRequest =
 async def search_transcript(video_id: str, request: RAGSearchRequest):
     """Search for relevant segments in a video's transcript"""
     try:
-        # Check if video has been processed
+
         existing_collections = rag_service.list_video_collections()
         if video_id not in [c['name'] for c in existing_collections]:
             return RAGSearchResponse(
@@ -99,7 +99,7 @@ async def search_transcript(video_id: str, request: RAGSearchRequest):
                 error=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
             )
         
-        # Perform search
+
         result = rag_service.search_transcript(video_id, request.query, request.top_k)
         
         if result["success"]:
@@ -138,7 +138,7 @@ async def search_transcript(video_id: str, request: RAGSearchRequest):
 async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
     """Generate an AI response based on transcript content"""
     try:
-        # Check if video has been processed
+
         existing_collections = rag_service.list_video_collections()
         if video_id not in [c['name'] for c in existing_collections]:
             return RAGGenerateResponse(
@@ -149,7 +149,7 @@ async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
                 error=f"Video {video_id} not processed for RAG. Use /process/{video_id} first."
             )
         
-        # Generate response
+
         result = rag_service.generate_rag_response(video_id, request.query, request.top_k)
         
         if result["success"]:
@@ -218,54 +218,21 @@ async def delete_video_rag_data(video_id: str):
 
 @router.get("/health")
 async def rag_health_check():
-    """Enhanced health check for RAG service with accuracy features report"""
     try:
         video_count = len(rag_service.list_video_collections())
-        
-        # Detect embedding model being used
         embedding_model_name = getattr(rag_service.embedding_model, 'model_name', 'unknown')
-        
-        # Check if OpenAI is available for LLM generation
         openai_available = rag_service.openai_client is not None
-        
-        # Check vector store type
         vector_store_type = "ChromaDB" if rag_service.use_chromadb else "In-Memory"
         
         return {
             "status": "healthy",
-            "service": "Enhanced RAG",
-            "version": "2.0",
             "processed_videos": video_count,
             "embedding_model": embedding_model_name,
             "vector_store": vector_store_type,
-            "openai_available": openai_available,
-            "enhanced_features": {
-                "sentence_aware_chunking": True,
-                "chunk_size": 800,
-                "chunk_overlap": 100,
-                "query_enhancement": True,
-                "relevance_filtering": True,
-                "relevance_threshold": 0.3,
-                "context_organization": True,
-                "enhanced_prompts": True,
-                "gpt4_support": True,
-                "max_chunks": 2000,
-                "temperature": 0.1
-            },
-            "accuracy_improvements": [
-                "Better sentence boundary detection",
-                "Improved embedding model (all-mpnet-base-v2)",
-                "Query variation generation",
-                "Duplicate filtering and re-ranking",
-                "High/medium relevance context organization",
-                "Specialized video transcript prompts",
-                "Lower temperature for consistency",
-                "GPT-4 with fallback to GPT-3.5-turbo"
-            ]
+            "openai_available": openai_available
         }
     except Exception as e:
         return {
             "status": "unhealthy",
-            "error": str(e),
-            "service": "Enhanced RAG"
+            "error": str(e)
         } 

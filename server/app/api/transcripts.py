@@ -17,7 +17,7 @@ async def get_transcript_supadata(
         result = transcript_service.extract_transcript(video_id, language)
         
         if not result["success"]:
-            # Return error response with success=False
+
             return TranscriptWithTimestampsResponse(
                 success=False,
                 video_id=video_id,
@@ -32,15 +32,7 @@ async def get_transcript_supadata(
             metadata=result["metadata"]
         )
         
-        # Save to file if requested
-        # if save_to_file and result["segments"]:
-        #     file_path = transcript_service.save_transcript_to_file(response_data, video_id)
-        #     if file_path:
-        #         response_data.metadata["file_path"] = file_path
-        #         response_data.metadata["file_saved"] = True
-        #     else:
-        #         response_data.metadata["file_saved"] = False
-        #         response_data.metadata["file_error"] = "Failed to save file"
+
         
         if save_to_db and result["segments"]:
             try:
@@ -87,18 +79,3 @@ async def get_transcript_from_db(video_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# @router.get("/search")
-# async def search_transcripts(
-#     query: str = Query(..., description="Search query"),
-#     limit: int = Query(10, description="Maximum number of results")
-# ):
-#     """Search transcript segments by text content."""
-#     try:
-#         results = await transcript_service.get_transcript_from_db(query, limit)
-#         return {
-#             "query": query,
-#             "count": len(results),
-#             "results": results
-#         }
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))

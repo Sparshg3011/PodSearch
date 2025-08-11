@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from ..models.youtube import TranscriptSegment
 from ..models.transcript_db import TranscriptSegmentDB
 
-
 load_dotenv()
 
 try:
@@ -17,7 +16,6 @@ try:
 except ImportError:
     SUPADATA_AVAILABLE = False
 
-# Check if yt-dlp is available
 try:
     subprocess.run(['yt-dlp', '--version'], capture_output=True, check=True)
     YT_DLP_AVAILABLE = True
@@ -49,7 +47,6 @@ class TranscriptService:
         Returns:
             dict with transcript data and metadata
         """
-        # Try Supadata first if available
         if SUPADATA_AVAILABLE and self.client:
             try:
                 result = self._extract_with_supadata(video_id, language)
@@ -60,7 +57,6 @@ class TranscriptService:
             except Exception as e:
                 print(f"Supadata error: {str(e)}. Trying fallback methods...")
         
-        # Fallback to yt-dlp if Supadata fails or is unavailable
         if YT_DLP_AVAILABLE:
             try:
                 result = self._extract_with_ytdlp(video_id, language)
@@ -71,7 +67,6 @@ class TranscriptService:
             except Exception as e:
                 print(f"yt-dlp error: {str(e)}")
         
-        # If all methods fail
         return {
             "success": False,
             "error": "All transcript extraction methods failed. Supadata limit exceeded and yt-dlp not available or failed.",
@@ -138,7 +133,6 @@ class TranscriptService:
     def _extract_with_ytdlp(self, video_id: str, language: str = "en") -> dict:
         """Extract transcript using yt-dlp as fallback"""
         try:
-            # Use yt-dlp to extract transcript
             cmd = [
                 'yt-dlp',
                 f'https://www.youtube.com/watch?v={video_id}',
@@ -150,16 +144,13 @@ class TranscriptService:
                 '--output', f'%(id)s.%(ext)s'
             ]
             
-            # Use temporary directory
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Change to temp directory
                 old_cwd = os.getcwd()
                 os.chdir(temp_dir)
                 
                 try:
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                     
-                    # Look for subtitle files
                     subtitle_files = []
                     for file in os.listdir('.'):
                         if file.startswith(video_id) and ('.json3' in file or '.vtt' in file):
@@ -174,7 +165,6 @@ class TranscriptService:
                             "metadata": {"video_id": video_id, "language": language}
                         }
                     
-                    # Try to parse JSON3 format first
                     for subtitle_file in subtitle_files:
                         if '.json3' in subtitle_file:
                             try:
@@ -203,7 +193,6 @@ class TranscriptService:
                                 print(f"Error parsing JSON3 subtitle file: {e}")
                                 continue
                     
-                    # If JSON3 parsing failed, try VTT format
                     for subtitle_file in subtitle_files:
                         if '.vtt' in subtitle_file:
                             try:
@@ -297,18 +286,15 @@ class TranscriptService:
             while i < len(lines):
                 line = lines[i].strip()
                 
-                # Look for timestamp lines (format: 00:00:01.000 --> 00:00:04.000)
                 if '-->' in line:
                     timestamp_parts = line.split(' --> ')
                     if len(timestamp_parts) == 2:
                         start_time = self._parse_vtt_timestamp(timestamp_parts[0])
                         
-                        # Get the text (next non-empty lines until empty line or next timestamp)
                         i += 1
                         text_parts = []
                         while i < len(lines) and lines[i].strip() and '-->' not in lines[i]:
                             text_line = lines[i].strip()
-                            # Remove VTT formatting tags
                             text_line = self._clean_vtt_text(text_line)
                             if text_line:
                                 text_parts.append(text_line)
@@ -333,22 +319,20 @@ class TranscriptService:
     def _parse_vtt_timestamp(self, timestamp_str: str) -> float:
         """Parse VTT timestamp to seconds"""
         try:
-            # Format: 00:00:01.000 or 01.000
             timestamp_str = timestamp_str.strip()
             
             if ':' in timestamp_str:
                 parts = timestamp_str.split(':')
-                if len(parts) == 3:  # HH:MM:SS.mmm
+                if len(parts) == 3:
                     hours = int(parts[0])
                     minutes = int(parts[1])
                     seconds = float(parts[2])
                     return hours * 3600 + minutes * 60 + seconds
-                elif len(parts) == 2:  # MM:SS.mmm
+                elif len(parts) == 2:
                     minutes = int(parts[0])
                     seconds = float(parts[1])
                     return minutes * 60 + seconds
             else:
-                # Just seconds
                 return float(timestamp_str)
         except:
             return 0.0
@@ -356,7 +340,6 @@ class TranscriptService:
     def _clean_vtt_text(self, text: str) -> str:
         """Remove VTT formatting tags from text"""
         import re
-        # Remove VTT tags like <c.colorE5E5E5>, </c>, etc.
         text = re.sub(r'<[^>]+>', '', text)
         return text.strip()
 
@@ -598,32 +581,3 @@ class TranscriptService:
         except Exception as e:
             return None
     
-    # async def search_transcripts_in_db(self, query: str, limit: int = 10) -> List[dict]:
-    #     """
-    #     Search transcript segments by text content
-        
-    #     Args:
-    #         query: Search query
-    #         limit: Maximum results to return
-            
-    #     Returns:
-    #         List of matching transcript segments
-    #     """
-    #     try:
-    #         segments = await TranscriptSegmentDB.find({
-    #             "text": {"$regex": query, "$options": "i"}
-    #         }).limit(limit).to_list()
-            
-    #         return [
-    #             {
-    #                 "video_id": segment.video_id,
-    #                 "sequence": segment.sequence,
-    #                 "text": segment.text,
-    #                 "timestamp": segment.timestamp,
-    #                 "created_at": segment.created_at
-    #             }
-    #             for segment in segments
-    #         ]
-            
-    #     except Exception as e:
-    #         return [] 

@@ -1,14 +1,10 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Performance optimizations
   experimental: {
     optimizePackageImports: ['lucide-react', '@heroicons/react'],
   },
   
-  // Faster builds in development
   swcMinify: true,
   
-  // Image optimization
   images: {
     remotePatterns: [
       {
@@ -22,7 +18,6 @@ const nextConfig = {
     ],
   },
   
-  // API proxy
   async rewrites() {
     return [
       {
@@ -32,10 +27,8 @@ const nextConfig = {
     ]
   },
   
-  // Enable webpack optimizations
   webpack: (config, { dev, isServer }) => {
     if (dev && !isServer) {
-      // Faster development builds
       config.watchOptions = {
         poll: 1000,
         aggregateTimeout: 300,

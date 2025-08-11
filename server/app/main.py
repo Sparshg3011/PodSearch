@@ -6,7 +6,7 @@ from .core.database import connect_to_mongo, close_mongo_connection
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Enable MongoDB connection
+
     try:
         await connect_to_mongo()
         print("MongoDB connection established successfully")
