@@ -21,11 +21,6 @@
       "static/chunks/main-app.js",
       "static/chunks/app/workspace/[videoId]/page.js"
     ],
-    "/saved/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/saved/page.js"
-    ],
     "/not-found": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
