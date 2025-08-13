@@ -20,10 +20,6 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-
-
-
-
 export default function HomePage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,8 +47,6 @@ export default function HomePage() {
       setSearchLoading(false);
     }
   }, [router, setStoreQuery, setSearchResults, setSearchLoading]);
-
-
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,8 +88,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
-
 
         <section className="py-16 bg-gray-50">
           <div className="max-w-5xl mx-auto px-4">
@@ -147,7 +139,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
 
     </div>
     </Layout>

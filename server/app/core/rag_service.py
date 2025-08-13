@@ -443,15 +443,32 @@ Use simple text with line breaks. No markdown formatting."""
                     max_tokens=1500
                 )
             except Exception:
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=1500
-                )
+                try:
+                    response = self.openai_client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.1,
+                        max_tokens=1500
+                    )
+                except Exception:
+                    segments = all_results[:5]
+                    fallback_answer = "Based on the most relevant transcript segments:\n\n"
+                    for i, segment in enumerate(segments, 1):
+                        timestamp = segment.get("timestamp", 0)
+                        timestamp_str = f"[{int(timestamp // 60):02d}:{int(timestamp % 60):02d}]"
+                        fallback_answer += f"- {timestamp_str} {segment['text']}\n"
+                    fallback_answer += "\nNote: AI analysis unavailable - showing raw transcript segments"
+                    return {
+                        "success": True,
+                        "query": query,
+                        "video_id": video_id,
+                        "answer": fallback_answer,
+                        "sources": all_results,
+                        "retrieval_only": True
+                    }
             
             return {
                 "success": True,

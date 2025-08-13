@@ -51,15 +51,15 @@ body {
   }
   
   .fact-check-verified {
-    @apply bg-success-50 text-success-600 border-success-200;
+    @apply bg-success-50 text-success-600 border-success-500;
   }
   
   .fact-check-warning {
-    @apply bg-warning-50 text-warning-600 border-warning-200;
+    @apply bg-warning-50 text-warning-600 border-warning-500;
   }
   
   .fact-check-error {
-    @apply bg-error-50 text-error-600 border-error-200;
+    @apply bg-error-50 text-error-600 border-error-500;
   }
   
   .fact-check-unclear {

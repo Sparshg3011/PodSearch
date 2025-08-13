@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from .api import youtube, transcripts, rag
+from .api import youtube, transcripts, rag, verify
 from .core.database import connect_to_mongo, close_mongo_connection
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.add_middleware(
 app.include_router(youtube.router, prefix="/api/youtube", tags=["YouTube"])
 app.include_router(transcripts.router, prefix="/api/transcripts", tags=["Transcripts"])
 app.include_router(rag.router, prefix="/api/rag", tags=["RAG"])
+app.include_router(verify.router, prefix="/api/verify", tags=["Verify"])
 
 
 

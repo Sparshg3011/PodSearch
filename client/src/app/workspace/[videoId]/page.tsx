@@ -19,7 +19,8 @@ import {
 import { 
   transcriptApi, 
   ragApi,
-  utils 
+  utils,
+  verifyApi
 } from '@/lib/api';
 import { 
   TranscriptSegment
@@ -36,8 +37,6 @@ import {
 import toast from 'react-hot-toast';
 
 const ReactPlayer = dynamicImport(() => import('react-player'), { ssr: false });
-
-
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -56,7 +55,6 @@ export default function WorkspacePage() {
   } = useWorkspaceActions();
   const { setPlayerState } = useUIActions();
 
-
   const [chatInput, setChatInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -66,6 +64,7 @@ export default function WorkspacePage() {
   const [hasInitialized, setHasInitialized] = useState(false);
   const [retryAttempts, setRetryAttempts] = useState(0);
   const [pendingSeek, setPendingSeek] = useState<number | null>(null);
+  const [messageSelections, setMessageSelections] = useState<Record<string, {text: string, verifying: boolean, result: any}>>({});
   
   const playerRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -295,7 +294,7 @@ export default function WorkspacePage() {
     }
   };
 
-  const renderAnswer = (text: string) => {
+  const renderAnswer = (text: string, messageId: string) => {
     const parts: React.ReactNode[] = [];
     const regex = /\[(?:\s*)(?:(\d{1,2}):)?(\d{1,3}):(\d{1,2})(?:\s*)\]|\((?:\s*)(?:(\d{1,2}):)?(\d{1,3}):(\d{1,2})(?:\s*)\)/g;
     let lastIndex = 0;
@@ -347,12 +346,72 @@ export default function WorkspacePage() {
       parts.push(text.slice(lastIndex));
     }
 
-    return <>{parts}</>;
+    return <span
+      onMouseUp={() => {
+        const sel = window.getSelection?.()?.toString() || '';
+        const selectedText = sel.trim();
+        if (selectedText) {
+          setMessageSelections(prev => ({
+            ...prev,
+            [messageId]: {
+              text: selectedText,
+              verifying: false,
+              result: null
+            }
+          }));
+        }
+      }}
+    >{parts}</span>;
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard!');
+  };
+
+  const handleVerify = async (messageId: string) => {
+    const selection = messageSelections[messageId];
+    if (!selection?.text || selection.verifying) return;
+    
+    setMessageSelections(prev => ({
+      ...prev,
+      [messageId]: {
+        ...prev[messageId],
+        verifying: true,
+        result: null
+      }
+    }));
+
+    try {
+      const res = await verifyApi.verifyClaim({
+        claim_text: selection.text,
+        max_sources: 3,
+      });
+      
+      if (res.success) {
+        setMessageSelections(prev => ({
+          ...prev,
+          [messageId]: {
+            ...prev[messageId],
+            verifying: false,
+            result: res.result
+          }
+        }));
+        toast.success('Claim verified!');
+      } else {
+        throw new Error(res.error || 'Verification failed');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Verification failed');
+      setMessageSelections(prev => ({
+        ...prev,
+        [messageId]: {
+          ...prev[messageId],
+          verifying: false,
+          result: null
+        }
+      }));
+    }
   };
 
   if (isLoading) {
@@ -498,7 +557,7 @@ export default function WorkspacePage() {
                               </div>
                             ) : (
                               <>
-                                <p className="text-sm">{renderAnswer(message.content)}</p>
+                                <p className="text-sm">{renderAnswer(message.content, message.id)}</p>
                                 
                                 {message.sources && message.sources.length > 0 && (
                                   <div className="mt-2 pt-2 border-t border-gray-200">
@@ -514,6 +573,80 @@ export default function WorkspacePage() {
                                         {utils.truncateText(source.text, 60)}
                                       </button>
                                     ))}
+                                  </div>
+                                )}
+                                {messageSelections[message.id]?.text && (
+                                  <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-[11px] uppercase tracking-wide text-gray-500">Selected claim</span>
+                                      <button
+                                        onClick={() => setMessageSelections(prev => { const next = { ...prev }; delete next[message.id]; return next; })}
+                                        className="text-xs text-gray-500 hover:text-gray-700"
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                    <div className="text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                                      {utils.truncateText(messageSelections[message.id].text, 120)}
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2 mt-3">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleVerify(message.id)}
+                                        disabled={messageSelections[message.id].verifying}
+                                        className="text-xs px-3 py-1"
+                                      >
+                                        {messageSelections[message.id].verifying ? 'Verifying…' : 'Verify'}
+                                      </Button>
+                                    </div>
+                                    {messageSelections[message.id].result && (
+                                      <div className="mt-3 p-3 bg-white border rounded-lg">
+                                        <div className="flex items-center justify-between">
+                                          <Badge
+                                            className={`text-[11px] ${
+                                              messageSelections[message.id].result.verdict === 'Supported'
+                                                ? 'fact-check-verified'
+                                                : messageSelections[message.id].result.verdict === 'Contradicted'
+                                                  ? 'fact-check-error'
+                                                  : 'fact-check-unclear'
+                                            }`}
+                                          >
+                                            {messageSelections[message.id].result.verdict}
+                                          </Badge>
+                                          <span className="text-xs text-gray-600">
+                                            {Math.round(messageSelections[message.id].result.confidence * 100)}% confident
+                                          </span>
+                                        </div>
+                                        <div className="mt-2 space-y-2">
+                                          {messageSelections[message.id].result.sources?.map((source: any, idx: number) => (
+                                            <div key={idx} className="rounded-lg border bg-gray-50 p-2">
+                                              <div className="flex items-center justify-between">
+                                                <a
+                                                  href={source.url_with_text_fragment || source.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-xs font-medium text-primary-600 hover:underline underline-offset-2"
+                                                >
+                                                  {source.domain}
+                                                </a>
+                                                <span className="text-[10px] text-gray-500">{Math.round(source.similarity * 100)}% match</span>
+                                              </div>
+                                              <p className="text-xs text-gray-700 mt-1">
+                                                {utils.truncateText(source.snippet, 160)}
+                                              </p>
+                                              <a
+                                                href={source.url_with_text_fragment || source.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-[11px] text-primary-600 hover:text-primary-700 mt-1 inline-block"
+                                              >
+                                                Open source
+                                              </a>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </>
