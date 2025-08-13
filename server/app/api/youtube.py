@@ -20,7 +20,6 @@ async def search_youtube(
 
 @router.get("/video/{video_id}")
 async def get_video_info(video_id: str):
-    """Get detailed info about a specific video"""
     try:
         video = YouTubeService.get_video_info(video_id)
         return video

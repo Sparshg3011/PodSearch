@@ -32,7 +32,6 @@ export const Layout: React.FC<LayoutProps> = ({
     { name: 'Saved', href: '/saved', icon: BookOpen, current: pathname === '/saved' },
   ];
 
-
   return (
     <div className={clsx('min-h-screen bg-gray-50', ui.theme === 'dark' && 'dark')}>
       <div className={clsx(
