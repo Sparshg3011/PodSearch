@@ -325,7 +325,7 @@ class RAGService:
             logger.error(f"Error searching transcript for {video_id}: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def generate_rag_response(self, video_id: str, query: str, top_k: int = 100) -> Dict[str, Any]:
+    def generate_rag_response(self, video_id: str, query: str, top_k: int = 100, max_context_chunks: int = 120) -> Dict[str, Any]:
         try:
             search_results = self.search_transcript(video_id, query, top_k)
             
@@ -367,51 +367,72 @@ class RAGService:
             scores = [r["relevance_score"] for r in all_results]
             avg_score = sum(scores) / len(scores) if scores else 0
             
+            max_chunks_to_use = min(max_context_chunks, len(all_results))
             high_threshold = max(0.3, avg_score + 0.1)
+            medium_threshold = max(0.15, avg_score - 0.1)
+            
             high_relevance = [r for r in all_results if r["relevance_score"] >= high_threshold]
-            medium_relevance = [r for r in all_results if 0.2 <= r["relevance_score"] < high_threshold]
+            medium_relevance = [r for r in all_results if medium_threshold <= r["relevance_score"] < high_threshold]
+            low_relevance = [r for r in all_results if r["relevance_score"] < medium_threshold]
             
             context_parts = []
-            
+            chunks_used = 0
             if high_relevance:
-                context_parts.append("=== MOST RELEVANT SEGMENTS ===")
-                for result in high_relevance[:10]:
+                context_parts.append("=== HIGHEST RELEVANCE SEGMENTS ===")
+                high_chunks_to_use = min(50, len(high_relevance), max_chunks_to_use - chunks_used)
+                for result in high_relevance[:high_chunks_to_use]:
                     timestamp = result.get("timestamp", 0)
                     timestamp_str = f"[{int(timestamp // 60):02d}:{int(timestamp % 60):02d}]"
                     context_parts.append(f"{timestamp_str} {result['text']}")
-            
-            if medium_relevance and len(context_parts) < 15:
+                    chunks_used += 1
+            if medium_relevance and chunks_used < max_chunks_to_use:
+                context_parts.append("\n=== SUPPORTING CONTEXT ===")
+                medium_chunks_to_use = min(40, len(medium_relevance), max_chunks_to_use - chunks_used)
+                for result in medium_relevance[:medium_chunks_to_use]:
+                    timestamp = result.get("timestamp", 0)
+                    timestamp_str = f"[{int(timestamp // 60):02d}:{int(timestamp % 60):02d}]"
+                    context_parts.append(f"{timestamp_str} {result['text']}")
+                    chunks_used += 1
+            if low_relevance and chunks_used < max_chunks_to_use:
                 context_parts.append("\n=== ADDITIONAL CONTEXT ===")
-                for result in medium_relevance[:5]:
+                low_chunks_to_use = min(30, len(low_relevance), max_chunks_to_use - chunks_used)
+                for result in low_relevance[:low_chunks_to_use]:
                     timestamp = result.get("timestamp", 0)
                     timestamp_str = f"[{int(timestamp // 60):02d}:{int(timestamp % 60):02d}]"
                     context_parts.append(f"{timestamp_str} {result['text']}")
-            
+                    chunks_used += 1
             if not context_parts:
                 context_parts.append("=== AVAILABLE TRANSCRIPT SEGMENTS ===")
-                for result in all_results[:5]:
+                fallback_chunks = min(20, len(all_results))
+                for result in all_results[:fallback_chunks]:
                     timestamp = result.get("timestamp", 0)
                     timestamp_str = f"[{int(timestamp // 60):02d}:{int(timestamp % 60):02d}]"
                     context_parts.append(f"{timestamp_str} {result['text']}")
             
             context = "\n\n".join(context_parts)
             
-            system_prompt = """You are a helpful assistant that analyzes podcast transcripts. Provide clear, concise answers.
+            estimated_tokens = len(context.split()) * 1.3
+            logger.info(f"Using {chunks_used} chunks, estimated tokens: {int(estimated_tokens)}")
+            
+            system_prompt = """You are a helpful assistant that analyzes podcast transcripts with extensive context. Provide comprehensive, well-structured answers.
 
 FORMATTING RULES:
-- Start with the direct answer (1-2 sentences)
+- Start with the direct answer (2-3 sentences)
 - Use line breaks and clear spacing for readability
 - Be confident and definitive based on evidence
 - Use timestamps strategically when they add value
+- Synthesize information from multiple segments when relevant
 
 STRUCTURE:
 1. Direct answer first
 2. Blank line
-3. "Key Points:" (followed by list items with dashes)
+3. "Key Points:" (followed by detailed list items with dashes)
 4. Blank line  
-5. "Evidence:" (if timestamps add value)
+5. "Supporting Details:" (with timestamps when valuable)
+6. Blank line
+7. "Context:" (broader connections if relevant)
 
-KEEP IT CONCISE: 150-300 words maximum."""
+COMPREHENSIVE ANALYSIS: 200-500 words - use the extensive context provided to give thorough, nuanced answers."""
             
             user_prompt = f"""Question: {query}
 
@@ -440,7 +461,7 @@ Use simple text with line breaks. No markdown formatting."""
                         {"role": "user", "content": user_prompt}
                     ],
                     temperature=0.1,
-                    max_tokens=1500
+                    max_tokens=2500
                 )
             except Exception:
                 try:
@@ -451,7 +472,7 @@ Use simple text with line breaks. No markdown formatting."""
                             {"role": "user", "content": user_prompt}
                         ],
                         temperature=0.1,
-                        max_tokens=1500
+                        max_tokens=2500
                     )
                 except Exception:
                     segments = all_results[:5]

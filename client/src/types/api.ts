@@ -54,6 +54,7 @@ export interface RAGSearchResponse {
 export interface RAGGenerateRequest {
   query: string;
   top_k: number;
+  max_context_chunks?: number;
 }
 
 export interface RAGGenerateResponse {

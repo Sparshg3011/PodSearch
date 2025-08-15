@@ -118,16 +118,16 @@ export const Layout: React.FC<LayoutProps> = ({
       </div>
 
       <div className="lg:pl-72 flex flex-col flex-1">
-        <div className="sticky top-0 z-40 flex h-16 bg-white/80 backdrop-blur-lg border-b border-gray-200">
+        <div className="sticky top-0 z-40 flex h-20 bg-white/80 backdrop-blur-lg border-b border-gray-200">
           <button
             type="button"
-            className="px-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 lg:hidden transition-colors"
+            className="px-6 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 lg:hidden transition-colors"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-6 w-6" />
           </button>
           
-          <div className="flex flex-1 justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-1 justify-between px-6">
             <div className="flex flex-1 items-center">
               <h1 className="text-xl font-bold text-gray-900">{title}</h1>
             </div>

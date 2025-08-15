@@ -23,6 +23,7 @@ class RAGSearchResponse(BaseModel):
 class RAGGenerateRequest(BaseModel):
     query: str = Field(..., description="Question to ask about the transcript")
     top_k: int = Field(100, description="Number of context segments to use", ge=1, le=2000)
+    max_context_chunks: int = Field(120, description="Maximum chunks to use in context", ge=10, le=500)
 
 class RAGGenerateResponse(BaseModel):
     success: bool = Field(..., description="Whether the generation was successful")

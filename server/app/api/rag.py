@@ -150,7 +150,7 @@ async def generate_rag_response(video_id: str, request: RAGGenerateRequest):
             )
         
 
-        result = rag_service.generate_rag_response(video_id, request.query, request.top_k)
+        result = rag_service.generate_rag_response(video_id, request.query, request.top_k, request.max_context_chunks)
         
         if result["success"]:
             return RAGGenerateResponse(

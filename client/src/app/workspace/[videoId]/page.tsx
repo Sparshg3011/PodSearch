@@ -251,6 +251,7 @@ export default function WorkspacePage() {
       const ragResponse = await ragApi.generateResponse(videoId, {
         query: userMessage,
         top_k: 100,
+        max_context_chunks: 120,
       });
 
       if (ragResponse.success) {
