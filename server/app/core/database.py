@@ -12,7 +12,6 @@ class Database:
 database = Database()
 
 async def connect_to_mongo():
-    """Create database connection"""
     mongodb_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     database_name = os.getenv("DATABASE_NAME", "podsearch")
     
@@ -33,10 +32,8 @@ async def connect_to_mongo():
     print("MongoDB connection and Beanie initialization complete")
 
 async def close_mongo_connection():
-    """Close database connection"""
     if database.client:
         database.client.close()
 
 def get_database():
-    """Get database instance"""
     return database.database 

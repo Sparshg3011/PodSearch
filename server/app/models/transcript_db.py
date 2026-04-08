@@ -4,7 +4,6 @@ from typing import Optional
 from datetime import datetime
 
 class TranscriptSegmentDB(Document):
-    """MongoDB document for storing video ID and transcript segments"""
     video_id: str = Field(..., description="YouTube video ID")
     sequence: int = Field(..., description="Order of segment in the transcript")
     text: str = Field(..., description="Transcript text for this segment")
@@ -15,6 +14,6 @@ class TranscriptSegmentDB(Document):
         name = "transcript_segments"
         indexes = [
             "video_id",
-            [("video_id", 1), ("sequence", 1)],  # Compound index for efficient retrieval
+            [("video_id", 1), ("sequence", 1)],
             "timestamp"
         ] 

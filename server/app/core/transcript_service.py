@@ -7,6 +7,11 @@ from datetime import datetime
 from dotenv import load_dotenv
 from ..models.youtube import TranscriptSegment
 from ..models.transcript_db import TranscriptSegmentDB
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+    YT_TRANSCRIPT_API_AVAILABLE = True
+except Exception:
+    YT_TRANSCRIPT_API_AVAILABLE = False
 
 load_dotenv()
 
@@ -23,7 +28,6 @@ except (subprocess.CalledProcessError, FileNotFoundError):
     YT_DLP_AVAILABLE = False
 
 class TranscriptService:
-    """Service for extracting YouTube transcripts using multiple fallback methods"""
     
     def __init__(self):
         if SUPADATA_AVAILABLE:
@@ -37,16 +41,6 @@ class TranscriptService:
             self.client = None
     
     def extract_transcript(self, video_id: str, language: str = "en") -> dict:
-        """
-        Extract transcript for a given video ID using multiple fallback methods
-        
-        Args:
-            video_id: YouTube video ID
-            language: Language code (default: "en")
-            
-        Returns:
-            dict with transcript data and metadata
-        """
         if SUPADATA_AVAILABLE and self.client:
             try:
                 result = self._extract_with_supadata(video_id, language)
@@ -67,6 +61,16 @@ class TranscriptService:
             except Exception as e:
                 print(f"yt-dlp error: {str(e)}")
         
+        if YT_TRANSCRIPT_API_AVAILABLE:
+            try:
+                result = self._extract_with_youtube_transcript_api(video_id, language)
+                if result["success"]:
+                    return result
+                else:
+                    print(f"YouTubeTranscriptApi failed: {result['error']}")
+            except Exception as e:
+                print(f"YouTubeTranscriptApi error: {str(e)}")
+        
         return {
             "success": False,
             "error": "All transcript extraction methods failed. Supadata limit exceeded and yt-dlp not available or failed.",
@@ -76,7 +80,6 @@ class TranscriptService:
         }
 
     def _extract_with_supadata(self, video_id: str, language: str = "en") -> dict:
-        """Extract transcript using Supadata API"""
         try:
             transcript_result = self.client.youtube.transcript(video_id=video_id, lang=language)
             
@@ -131,7 +134,6 @@ class TranscriptService:
             }
 
     def _extract_with_ytdlp(self, video_id: str, language: str = "en") -> dict:
-        """Extract transcript using yt-dlp as fallback"""
         try:
             cmd = [
                 'yt-dlp',
@@ -249,8 +251,58 @@ class TranscriptService:
                 "metadata": {"video_id": video_id, "language": language}
             }
 
+    def _extract_with_youtube_transcript_api(self, video_id: str, language: str = "en") -> dict:
+        try:
+            preferred_langs = [language, "en", "en-US", "en-GB"]
+            transcript = None
+            for lang in preferred_langs:
+                try:
+                    transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang])
+                    if transcript:
+                        break
+                except Exception:
+                    continue
+            if not transcript:
+                return {
+                    "success": False,
+                    "error": "No transcript available via YouTubeTranscriptApi",
+                    "transcript": None,
+                    "segments": [],
+                    "metadata": {"video_id": video_id, "language": language}
+                }
+            segments: List[TranscriptSegment] = []
+            text_parts: List[str] = []
+            for item in transcript:
+                text = item.get("text", "").strip()
+                start = float(item.get("start", 0.0))
+                if text:
+                    segments.append(TranscriptSegment(text=text, timestamp=start))
+                    text_parts.append(text)
+            text_content = " ".join(text_parts)
+            return {
+                "success": True,
+                "error": None,
+                "transcript": text_content,
+                "segments": segments,
+                "metadata": {
+                    "video_id": video_id,
+                    "language": language,
+                    "length": len(text_content),
+                    "segment_count": len(segments),
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "youtube-transcript-api"
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"YouTubeTranscriptApi error: {str(e)}",
+                "transcript": None,
+                "segments": [],
+                "metadata": {"video_id": video_id, "language": language}
+            }
+
     def _parse_json3_subtitles(self, subtitle_data) -> List[TranscriptSegment]:
-        """Parse JSON3 subtitle format from yt-dlp"""
         segments = []
         
         try:
@@ -276,7 +328,6 @@ class TranscriptService:
         return segments
 
     def _parse_vtt_subtitles(self, vtt_content: str) -> List[TranscriptSegment]:
-        """Parse VTT subtitle format"""
         segments = []
         
         try:
@@ -317,7 +368,6 @@ class TranscriptService:
         return segments
 
     def _parse_vtt_timestamp(self, timestamp_str: str) -> float:
-        """Parse VTT timestamp to seconds"""
         try:
             timestamp_str = timestamp_str.strip()
             
@@ -338,21 +388,11 @@ class TranscriptService:
             return 0.0
 
     def _clean_vtt_text(self, text: str) -> str:
-        """Remove VTT formatting tags from text"""
         import re
         text = re.sub(r'<[^>]+>', '', text)
         return text.strip()
 
     def _process_transcript_content_with_timestamps(self, content) -> dict:
-        """
-        Process transcript content and extract segments with timestamps
-        
-        Args:
-            content: The transcript content from supadata
-            
-        Returns:
-            Dict with text and segments list
-        """
         segments = []
         text_content = ""
         
@@ -377,12 +417,6 @@ class TranscriptService:
         }
     
     def _extract_segment_data(self, item) -> Optional[TranscriptSegment]:
-        """
-        Extract segment data from various item formats
-        
-        Returns:
-            TranscriptSegment object or None
-        """
         if isinstance(item, dict):
             timestamp_ms = item.get('offset') or item.get('start') or item.get('time') or item.get('timestamp') or item.get('begin')
             timestamp = None
@@ -453,30 +487,10 @@ class TranscriptService:
             )
     
     def _process_transcript_content(self, content) -> str:
-        """
-        Process transcript content (handle both string and list formats)
-        
-        Args:
-            content: The transcript content from supadata
-            
-        Returns:
-            Processed transcript as string
-        """
         result = self._process_transcript_content_with_timestamps(content)
         return result["text"]
     
     def save_transcript_to_file(self, transcript_data, video_id: str, directory: str = "transcripts") -> Optional[str]:
-        """
-        Save transcript with timestamps to a file
-        
-        Args:
-            transcript_data: Either a TranscriptWithTimestampsResponse object or plain text string
-            video_id: YouTube video ID
-            directory: Directory to save the file
-            
-        Returns:
-            Filepath if successful, None if failed
-        """
         try:
             os.makedirs(directory, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -510,16 +524,6 @@ class TranscriptService:
             return None
     
     async def save_transcript_to_db(self, video_id: str, segments: List[TranscriptSegment]) -> dict:
-        """
-        Save video ID and transcript segments to MongoDB
-        
-        Args:
-            video_id: YouTube video ID
-            segments: List of transcript segments with timestamps
-            
-        Returns:
-            Dictionary with save results
-        """
         try:
             await TranscriptSegmentDB.find(
                 TranscriptSegmentDB.video_id == video_id
@@ -551,15 +555,6 @@ class TranscriptService:
             }
     
     async def get_transcript_from_db(self, video_id: str) -> Optional[List[dict]]:
-        """
-        Get transcript segments from MongoDB by video ID
-        
-        Args:
-            video_id: YouTube video ID
-            
-        Returns:
-            List of transcript segments or None
-        """
         try:
             segments = await TranscriptSegmentDB.find(
                 TranscriptSegmentDB.video_id == video_id

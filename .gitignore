@@ -63,3 +63,9 @@ wheels/
 *.egg
 MANIFEST
 node_modules/
+
+# local editor config
+.vscode/
+
+# runtime artifacts
+server/screenshots/

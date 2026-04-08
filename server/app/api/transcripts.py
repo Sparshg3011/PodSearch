@@ -31,9 +31,7 @@ async def get_transcript_supadata(
             segments=result["segments"],
             metadata=result["metadata"]
         )
-        
 
-        
         if save_to_db and result["segments"]:
             try:
                 db_result = await transcript_service.save_transcript_to_db(
@@ -63,7 +61,6 @@ async def get_transcript_supadata(
 
 @router.get("/search/{video_id}")
 async def get_transcript_from_db(video_id: str):
-    """Get transcript segments from database by video ID."""
     try:
         segments = await transcript_service.get_transcript_from_db(video_id)
         if not segments:
@@ -78,4 +75,3 @@ async def get_transcript_from_db(video_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
